@@ -335,6 +335,12 @@ function BillingBreakdown(props: {
       label: t('Billing Path'),
       value: getUsageBillingPathLabel(t, other.admin_info),
     })
+    if (other.admin_info.upstream_cost) {
+      rows.push({
+        label: t('Estimated upstream cost'),
+        value: formatLogQuota(other.admin_info.upstream_cost),
+      })
+    }
   }
 
   const usageFacts =

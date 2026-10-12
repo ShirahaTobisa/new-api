@@ -346,6 +346,7 @@ export function BalanceCell({ channel }: { channel: Channel }) {
   const isTagRow = isTagAggregateRow(channel)
   const balance = channel.balance || 0
   const usedQuota = channel.used_quota || 0
+  const upstreamCost = channel.upstream_cost || 0
   const [isUpdating, setIsUpdating] = useState(false)
   const [rawBalanceResponse, setRawBalanceResponse] = useState<string | null>(
     null
@@ -546,6 +547,35 @@ export function BalanceCell({ channel }: { channel: Channel }) {
             <p>{sensitiveVisible ? usedLabel : maskedUsedLabel}</p>
           </TooltipContent>
         </Tooltip>
+        {sensitiveVisible && upstreamCost > 0 && (
+          <Tooltip>
+            <TooltipTrigger
+              render={
+                <StatusBadge
+                  label={`${t('Cost:')} ${withSuffix(
+                    formatQuotaWithCurrency(upstreamCost, {
+                      compact: true,
+                      locale,
+                      showSymbol: layout !== 'card',
+                    })
+                  )}`}
+                  variant='warning'
+                  size='sm'
+                  copyable={false}
+                  showDot={false}
+                  className='cursor-help'
+                />
+              }
+            />
+            <TooltipContent>
+              <p>
+                {t(
+                  'Estimated upstream cost since the cost settings were enabled'
+                )}
+              </p>
+            </TooltipContent>
+          </Tooltip>
+        )}
         <Tooltip>
           <TooltipTrigger
             render={

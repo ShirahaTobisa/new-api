@@ -130,6 +130,12 @@ type ChannelOtherSettings struct {
 	// rejection. Empty follows the default allow policy. Accepted values:
 	// "", "allow", "safe", "strict".
 	ToolLossPolicy string `json:"tool_loss_policy,omitempty"`
+	// 上游成本与账户余额：充值比例为上游每 1 美元额度实际花费的人民币，0 表示不估算成本；
+	// 填了访问令牌时，余额查询改为查上游站的账户余额（/api/user/self）。
+	UpstreamRechargeRate float64 `json:"upstream_recharge_rate,omitempty"`
+	UpstreamGroupRatio   float64 `json:"upstream_group_ratio,omitempty"`
+	UpstreamUserId       string  `json:"upstream_user_id,omitempty"`
+	UpstreamAccessToken  string  `json:"upstream_access_token,omitempty"`
 }
 
 func (s *ChannelOtherSettings) IsOpenRouterEnterprise() bool {

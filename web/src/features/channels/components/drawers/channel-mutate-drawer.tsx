@@ -233,6 +233,7 @@ import {
 } from '../model-mapping-editor'
 import { ModelRedirectPanel } from '../model-redirect-panel'
 import { ResponsesWebSocketSetting } from '../responses-websocket-setting'
+import { UpstreamBillingSettings } from '../upstream-billing-settings'
 import { UpstreamModelSelection } from '../upstream-model-selection'
 import {
   ChannelConfiguration,
@@ -4718,6 +4719,7 @@ export function ChannelMutateDrawer({
                 {httpProtocolFields}
                 {httpShardsFields}
                 {tlsInsecureSkipVerifyFields}
+                <UpstreamBillingSettings />
               </fieldset>
             </div>
             {upstreamModelDetectionFields}

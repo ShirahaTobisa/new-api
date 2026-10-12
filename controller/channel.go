@@ -1580,6 +1580,7 @@ func CopyChannel(c *gin.Context) {
 	if resetBalance {
 		clone.Balance = 0
 		clone.UsedQuota = 0
+		clone.UpstreamCost = 0
 	}
 
 	if err := clone.ValidateSettings(); err != nil {

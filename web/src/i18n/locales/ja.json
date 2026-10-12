@@ -7252,6 +7252,19 @@
     "Zhipu": "Zhipu",
     "Zhipu GLM": "Zhipu GLM",
     "Zhipu V4": "Zhipu V 4",
-    "Zoom": "ズーム"
+    "Zoom": "ズーム",
+    "Cost:": "Cost:",
+    "Estimated upstream cost since the cost settings were enabled": "Estimated upstream cost since the cost settings were enabled",
+    "Upstream cost and balance": "Upstream cost and balance",
+    "Estimate what each request costs on the upstream site, and query your account balance there instead of the key quota": "Estimate what each request costs on the upstream site, and query your account balance there instead of the key quota",
+    "Recharge rate (CNY per upstream $1)": "Recharge rate (CNY per upstream $1)",
+    "Leave empty to skip cost estimation": "Leave empty to skip cost estimation",
+    "Upstream group ratio": "Upstream group ratio",
+    "Group ratio of your key on the upstream site, defaults to 1": "Group ratio of your key on the upstream site, defaults to 1",
+    "Upstream user ID": "Upstream user ID",
+    "Required by older new-api sites, optional otherwise": "Required by older new-api sites, optional otherwise",
+    "Upstream access token": "Upstream access token",
+    "Access token from the upstream site personal settings. When set, balance queries return your account balance": "Access token from the upstream site personal settings. When set, balance queries return your account balance",
+    "Estimated upstream cost": "Estimated upstream cost"
   }
 }

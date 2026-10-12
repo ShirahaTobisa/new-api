@@ -486,6 +486,9 @@ func PostTextConsumeQuota(ctx *gin.Context, relayInfo *relaycommon.RelayInfo, us
 		other.SetPublic("image_output", summary.ImageTokens)
 	}
 	appendToolSurchargeLogInfo(other, summary.ToolSurchargeItems)
+	if summary.hasBillableUsage() {
+		recordTextUpstreamCost(ctx, relayInfo, billingUsage, tieredTokens, summary, other)
+	}
 	if summary.AudioInputPrice > 0 && summary.AudioTokens > 0 {
 		other.SetPublic("audio_input_seperate_price", true)
 		other.SetPublic("audio_input_token_count", summary.AudioTokens)

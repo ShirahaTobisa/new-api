@@ -719,6 +719,58 @@ func TestUsageBillingPathForLog(t *testing.T) {
 	}))
 }
 
+func TestRecordTextUpstreamCostIgnoresLocalGroupRatio(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	ctx, _ := gin.CreateTestContext(httptest.NewRecorder())
+	oldRate, oldBatch := operation_setting.USDExchangeRate, common.BatchUpdateEnabled
+	operation_setting.USDExchangeRate, common.BatchUpdateEnabled = 7.3, true
+	t.Cleanup(func() { operation_setting.USDExchangeRate, common.BatchUpdateEnabled = oldRate, oldBatch })
+
+	usage := &dto.Usage{PromptTokens: 1000, CompletionTokens: 200}
+	newInfo := func(groupRatio, rechargeRate float64) *relaycommon.RelayInfo {
+		return &relaycommon.RelayInfo{
+			RelayFormat:     types.RelayFormatOpenAI,
+			OriginModelName: "gpt-test",
+			StartTime:       time.Now(),
+			PriceData: hosttypes.PriceData{
+				ModelRatio:      1,
+				CompletionRatio: 2,
+				GroupRatioInfo:  hosttypes.GroupRatioInfo{GroupRatio: groupRatio},
+			},
+			ChannelMeta: &relaycommon.ChannelMeta{
+				ChannelId: 7,
+				ChannelOtherSettings: dto.ChannelOtherSettings{
+					UpstreamRechargeRate: rechargeRate,
+					UpstreamGroupRatio:   2,
+				},
+			},
+		}
+	}
+
+	tests := []struct {
+		name         string
+		groupRatio   float64
+		rechargeRate float64
+		wantCost     any
+	}{
+		// 1400 quota at group ratio 1, x2 upstream group ratio, x0.73 CNY per upstream $ / 7.3 CNY per $
+		{name: "free local group still costs upstream", groupRatio: 0, rechargeRate: 0.73, wantCost: 280},
+		{name: "discounted local group", groupRatio: 0.1, rechargeRate: 0.73, wantCost: 280},
+		{name: "no recharge rate skips estimation", groupRatio: 1, rechargeRate: 0, wantCost: nil},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			info := newInfo(tc.groupRatio, tc.rechargeRate)
+			summary := calculateTextQuotaSummary(ctx, info, usage)
+			other := model.NewLogOther()
+			recordTextUpstreamCost(ctx, info, usage, billingexpr.TokenParams{}, summary, other)
+
+			adminInfo, _ := other.Snapshot()["admin_info"].(map[string]any)
+			assert.Equal(t, tc.wantCost, adminInfo["upstream_cost"])
+		})
+	}
+}
+
 func TestAppendUsageBillingPathForLogWritesAdminInfo(t *testing.T) {
 	other := model.NewLogOther()
 	appendUsageBillingPathForLog(other, true, &dto.Usage{

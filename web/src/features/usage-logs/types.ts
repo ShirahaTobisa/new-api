@@ -147,6 +147,8 @@ export interface LogOtherData {
     // Reject / intercept reason (admin only)
     reject_reason?: string
     task_plugin?: TaskPluginInfo
+    // Estimated upstream cost in quota units (admin only)
+    upstream_cost?: number
   }
   root_info?: {
     task_plugin?: TaskPluginRuntimeInfo
