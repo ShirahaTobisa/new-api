@@ -5,6 +5,8 @@ import (
 	"net/http"
 	"net/url"
 	"strings"
+	"sync"
+	"time"
 
 	"github.com/QuantumNous/new-api/common"
 	"github.com/QuantumNous/new-api/constant"
@@ -48,17 +50,44 @@ func withSiteCredentials(channel *model.Channel, settings dto.ChannelOtherSettin
 	return settings
 }
 
-// updateUpstreamAccountBalance 查上游 new-api / one-api 站的账户余额（/api/user/self），按充值比例折算后存为渠道余额。
+// upstreamAccountCache 同一个上游账户一分钟内只查一次：同站多个渠道、连续点击都共用结果，避免触发上游限速
+var upstreamAccountCache sync.Map
+
+type upstreamAccountQuota struct {
+	usd       decimal.Decimal
+	fetchedAt time.Time
+}
+
+// updateUpstreamAccountBalance 查上游 new-api / one-api 站的账户余额，按充值比例折算后存为渠道余额。
 func updateUpstreamAccountBalance(channel *model.Channel, settings dto.ChannelOtherSettings) (float64, error) {
 	baseURL := strings.TrimRight(channel.GetBaseURL(), "/")
+	userId := strings.TrimSpace(settings.UpstreamUserId)
+	token := strings.TrimSpace(settings.UpstreamAccessToken)
+	cacheKey := baseURL + "|" + userId + "|" + token
+	cached, ok := upstreamAccountCache.Load(cacheKey)
+	if !ok || time.Since(cached.(upstreamAccountQuota).fetchedAt) >= time.Minute {
+		usd, err := fetchUpstreamAccountUSD(channel, baseURL, userId, token)
+		if err != nil {
+			return 0, err
+		}
+		cached = upstreamAccountQuota{usd: usd, fetchedAt: time.Now()}
+		upstreamAccountCache.Store(cacheKey, cached)
+	}
+	balance := service.UpstreamAmountToLocal(cached.(upstreamAccountQuota).usd, settings).InexactFloat64()
+	channel.UpdateBalance(balance)
+	return balance, nil
+}
+
+// fetchUpstreamAccountUSD 调上游 /api/user/self 读账户额度，按上游的每美元额度换算成上游美元。
+func fetchUpstreamAccountUSD(channel *model.Channel, baseURL string, userId string, token string) (decimal.Decimal, error) {
 	headers := http.Header{}
-	headers.Set("Authorization", "Bearer "+strings.TrimSpace(settings.UpstreamAccessToken))
-	if userId := strings.TrimSpace(settings.UpstreamUserId); userId != "" {
+	headers.Set("Authorization", "Bearer "+token)
+	if userId != "" {
 		headers.Set("New-Api-User", userId)
 	}
 	body, err := GetResponseBody(http.MethodGet, baseURL+"/api/user/self", channel, headers)
 	if err != nil {
-		return 0, err
+		return decimal.Zero, err
 	}
 	var self struct {
 		Success bool   `json:"success"`
@@ -68,10 +97,10 @@ func updateUpstreamAccountBalance(channel *model.Channel, settings dto.ChannelOt
 		} `json:"data"`
 	}
 	if err := common.Unmarshal(body, &self); err != nil {
-		return 0, err
+		return decimal.Zero, err
 	}
 	if !self.Success || self.Data.Quota == nil {
-		return 0, fmt.Errorf("upstream account query failed: %s", self.Message)
+		return decimal.Zero, fmt.Errorf("upstream account query failed: %s", self.Message)
 	}
 
 	// 上游站可能改过每美元对应的额度，读不到时按默认值 500000 算
@@ -87,10 +116,7 @@ func updateUpstreamAccountBalance(channel *model.Channel, settings dto.ChannelOt
 		}
 	}
 
-	usd := decimal.NewFromFloat(*self.Data.Quota).Div(decimal.NewFromFloat(quotaPerUnit))
-	balance := service.UpstreamAmountToLocal(usd, settings).InexactFloat64()
-	channel.UpdateBalance(balance)
-	return balance, nil
+	return decimal.NewFromFloat(*self.Data.Quota).Div(decimal.NewFromFloat(quotaPerUnit)), nil
 }
 
 // updateSub2APIBalance 用渠道 key 查 Sub2API 站的 /v1/usage：key 没设额度时 remaining 就是账户钱包余额。

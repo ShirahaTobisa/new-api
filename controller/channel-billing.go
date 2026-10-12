@@ -640,15 +640,9 @@ func updateAllChannelsBalance() error {
 		//if channel.Type != common.ChannelTypeOpenAI && channel.Type != common.ChannelTypeCustom {
 		//	continue
 		//}
-		result, err := updateChannelBalance(channel)
-		if err != nil {
-			continue
-		} else if result.RawResponse == "" {
-			// err is nil & balance <= 0 means quota is used up
-			if result.Balance <= 0 {
-				service.DisableChannel(*types.NewChannelError(channel.Id, channel.Type, channel.Name, channel.ChannelInfo.IsMultiKey, "", channel.GetAutoBan()), "Insufficient balance")
-			}
-		}
+		// 只记录余额，不按余额自动禁用：各家上游的余额口径不一，读错一次就会误停渠道；
+		// 查询失败也照样间隔，避免连续请求触发上游限速
+		_, _ = updateChannelBalance(channel)
 		time.Sleep(common.RequestInterval)
 	}
 	return nil
