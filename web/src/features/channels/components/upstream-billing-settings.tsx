@@ -140,7 +140,7 @@ export function UpstreamBillingSettings() {
         <SettingInput
           label={t('Upstream access token')}
           description={t(
-            'For new-api / one-api sites, create an access token in your personal settings there. Sub2API sites need nothing here, the channel key already returns the account balance'
+            'For new-api / one-api sites, create an access token in your personal settings there. Fill it in one channel per site, the other channels of that site share it. Sub2API sites need nothing here'
           )}
           value={settings.upstream_access_token}
           secret

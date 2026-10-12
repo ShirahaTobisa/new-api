@@ -508,7 +508,7 @@ func fetchAdvancedCustomBalance(channel *model.Channel) (channelBalanceResult, e
 }
 
 func updateChannelBalance(channel *model.Channel) (channelBalanceResult, error) {
-	settings := channel.GetOtherSettings()
+	settings := withSiteCredentials(channel, channel.GetOtherSettings())
 	if settings.UpstreamAccessToken != "" {
 		balance, err := updateUpstreamAccountBalance(channel, settings)
 		return channelBalanceResult{Balance: balance}, err

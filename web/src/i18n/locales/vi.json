@@ -7264,7 +7264,7 @@
     "Upstream user ID": "Upstream user ID",
     "Required by older new-api sites, optional otherwise": "Required by older new-api sites, optional otherwise",
     "Upstream access token": "Upstream access token",
-    "For new-api / one-api sites, create an access token in your personal settings there. Sub2API sites need nothing here, the channel key already returns the account balance": "For new-api / one-api sites, create an access token in your personal settings there. Sub2API sites need nothing here, the channel key already returns the account balance",
+    "For new-api / one-api sites, create an access token in your personal settings there. Fill it in one channel per site, the other channels of that site share it. Sub2API sites need nothing here": "For new-api / one-api sites, create an access token in your personal settings there. Fill it in one channel per site, the other channels of that site share it. Sub2API sites need nothing here",
     "Estimated upstream cost": "Estimated upstream cost"
   }
 }

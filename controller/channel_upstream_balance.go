@@ -3,6 +3,7 @@ package controller
 import (
 	"fmt"
 	"net/http"
+	"net/url"
 	"strings"
 
 	"github.com/QuantumNous/new-api/common"
@@ -13,6 +14,39 @@ import (
 
 	"github.com/shopspring/decimal"
 )
+
+// withSiteCredentials 同一个上游站（同域名）只需在一个渠道里填访问令牌，其他渠道查余额时借用它的令牌，
+// 自己没填充值比例时也借用它的。
+func withSiteCredentials(channel *model.Channel, settings dto.ChannelOtherSettings) dto.ChannelOtherSettings {
+	if settings.UpstreamAccessToken != "" {
+		return settings
+	}
+	site, err := url.Parse(channel.GetBaseURL())
+	if err != nil || site.Host == "" {
+		return settings
+	}
+	channels, err := model.GetAllChannels(0, 0, true, false)
+	if err != nil {
+		return settings
+	}
+	for _, other := range channels {
+		otherSite, err := url.Parse(other.GetBaseURL())
+		if other.Id == channel.Id || err != nil || !strings.EqualFold(otherSite.Host, site.Host) {
+			continue
+		}
+		shared := other.GetOtherSettings()
+		if shared.UpstreamAccessToken == "" {
+			continue
+		}
+		settings.UpstreamAccessToken = shared.UpstreamAccessToken
+		settings.UpstreamUserId = shared.UpstreamUserId
+		if settings.UpstreamRechargeRate <= 0 {
+			settings.UpstreamRechargeRate = shared.UpstreamRechargeRate
+		}
+		return settings
+	}
+	return settings
+}
 
 // updateUpstreamAccountBalance 查上游 new-api / one-api 站的账户余额（/api/user/self），按充值比例折算后存为渠道余额。
 func updateUpstreamAccountBalance(channel *model.Channel, settings dto.ChannelOtherSettings) (float64, error) {

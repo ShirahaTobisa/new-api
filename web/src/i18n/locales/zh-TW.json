@@ -7264,7 +7264,7 @@
     "Upstream user ID": "上游使用者 ID",
     "Required by older new-api sites, optional otherwise": "舊版 new-api 站需要填，其他可不填",
     "Upstream access token": "上游存取權杖",
-    "For new-api / one-api sites, create an access token in your personal settings there. Sub2API sites need nothing here, the channel key already returns the account balance": "new-api / one-api 站：在對方站的個人設定裡產生存取權杖填到這裡。Sub2API 站不用填，用渠道 key 就能查到帳戶餘額",
+    "For new-api / one-api sites, create an access token in your personal settings there. Fill it in one channel per site, the other channels of that site share it. Sub2API sites need nothing here": "new-api / one-api 站：在對方站的個人設定裡產生存取權杖填到這裡。同一個站只需在一個渠道裡填，其他渠道自動共用。Sub2API 站不用填",
     "Estimated upstream cost": "上游成本（估算）"
   }
 }
