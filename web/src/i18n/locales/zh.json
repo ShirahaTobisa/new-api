@@ -7264,7 +7264,7 @@
     "Upstream user ID": "上游用户 ID",
     "Required by older new-api sites, optional otherwise": "旧版 new-api 站需要填，其他可不填",
     "Upstream access token": "上游访问令牌",
-    "Access token from the upstream site personal settings. When set, balance queries return your account balance": "在上游站个人设置里生成的访问令牌。填写后，查询余额查的是你的账户余额",
+    "For new-api / one-api sites, create an access token in your personal settings there. Sub2API sites need nothing here, the channel key already returns the account balance": "new-api / one-api 站：在对方站的个人设置里生成访问令牌填到这里。Sub2API 站不用填，用渠道 key 就能查到账户余额",
     "Estimated upstream cost": "上游成本（估算）"
   }
 }

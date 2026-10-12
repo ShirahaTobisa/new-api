@@ -7264,7 +7264,7 @@
     "Upstream user ID": "上游使用者 ID",
     "Required by older new-api sites, optional otherwise": "舊版 new-api 站需要填，其他可不填",
     "Upstream access token": "上游存取權杖",
-    "Access token from the upstream site personal settings. When set, balance queries return your account balance": "在上游站個人設定裡產生的存取權杖。填寫後，查詢餘額查的是你的帳戶餘額",
+    "For new-api / one-api sites, create an access token in your personal settings there. Sub2API sites need nothing here, the channel key already returns the account balance": "new-api / one-api 站：在對方站的個人設定裡產生存取權杖填到這裡。Sub2API 站不用填，用渠道 key 就能查到帳戶餘額",
     "Estimated upstream cost": "上游成本（估算）"
   }
 }

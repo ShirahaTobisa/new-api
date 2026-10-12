@@ -6,6 +6,7 @@ import (
 	"strings"
 
 	"github.com/QuantumNous/new-api/common"
+	"github.com/QuantumNous/new-api/constant"
 	"github.com/QuantumNous/new-api/model"
 	"github.com/QuantumNous/new-api/relaykit/dto"
 	"github.com/QuantumNous/new-api/service"
@@ -56,4 +57,32 @@ func updateUpstreamAccountBalance(channel *model.Channel, settings dto.ChannelOt
 	balance := service.UpstreamAmountToLocal(usd, settings).InexactFloat64()
 	channel.UpdateBalance(balance)
 	return balance, nil
+}
+
+// updateSub2APIBalance 用渠道 key 查 Sub2API 站的 /v1/usage：key 没设额度时 remaining 就是账户钱包余额。
+// 不是 Sub2API 站时返回 false，交回原来的查询方式。
+func updateSub2APIBalance(channel *model.Channel, settings dto.ChannelOtherSettings) (float64, bool) {
+	switch channel.Type {
+	case constant.ChannelTypeOpenAI, constant.ChannelTypeAnthropic, constant.ChannelTypeCustom, constant.ChannelTypeSub2API:
+	default:
+		return 0, false
+	}
+	baseURL := strings.TrimRight(channel.GetBaseURL(), "/")
+	if baseURL == "" {
+		return 0, false
+	}
+	body, err := GetResponseBody(http.MethodGet, baseURL+"/v1/usage", channel, GetAuthHeader(strings.TrimSpace(channel.Key)))
+	if err != nil {
+		return 0, false
+	}
+	var usage struct {
+		Remaining *float64 `json:"remaining"`
+		Unit      string   `json:"unit"`
+	}
+	if common.Unmarshal(body, &usage) != nil || usage.Remaining == nil || usage.Unit != "USD" {
+		return 0, false
+	}
+	balance := service.UpstreamAmountToLocal(decimal.NewFromFloat(*usage.Remaining), settings).InexactFloat64()
+	channel.UpdateBalance(balance)
+	return balance, true
 }
