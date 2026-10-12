@@ -352,7 +352,9 @@ func SetApiRouter(router *gin.Engine) {
 		dataRoute.GET("/flow", middleware.AdminAuth(), controller.GetAllFlowQuotaDates)
 		dataRoute.GET("/flow/self", middleware.UserAuth(), controller.GetUserFlowQuotaDates)
 
-		logRoute.Use(middleware.CORS(), middleware.CriticalRateLimit())
+		// 不用 CriticalRateLimit：它和登录、刷新登录状态共用每 IP 20 次/20 分钟的名额，
+		// 客户端每条消息查一次花费就会把管理员挤出后台；这里仍受 GlobalAPIRateLimit 限制
+		logRoute.Use(middleware.CORS())
 		{
 			logRoute.GET("/token", middleware.TokenAuthReadOnly(), controller.GetLogByKey)
 		}
