@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/QuantumNous/new-api/common"
+	"github.com/QuantumNous/new-api/constant"
 	"github.com/QuantumNous/new-api/model"
 	"github.com/QuantumNous/new-api/relaykit/dto"
 	"github.com/QuantumNous/new-api/service"
@@ -32,7 +33,7 @@ type upstreamBillItem struct {
 }
 
 // AutomaticallySyncUpstreamBills 定时拉取 new-api 上游的消费日志，按上游请求编号对上本站日志，
-// 用上游实际扣费替换估算的上游成本。
+// 用上游实际扣费替换估算的上游成本；顺带刷新 Sub2API 上游的实时计费倍率，供估算使用。
 func AutomaticallySyncUpstreamBills(frequency int) {
 	for {
 		time.Sleep(time.Duration(frequency) * time.Minute)
@@ -46,12 +47,16 @@ func syncUpstreamBills() {
 		common.SysError(common.LogText("upstream bill sync: failed to load channels: %s", err.Error()))
 		return
 	}
-	// 同一个上游账户（同地址、同令牌）只拉一次账单
+	// 同一个上游账户（同地址、同令牌）只拉一次账单；没填令牌、但要估算成本的启用渠道去读 Sub2API 实时倍率
 	sites := make(map[string][]*model.Channel)
 	settingsById := make(map[int]dto.ChannelOtherSettings)
+	var rateCandidates []*model.Channel
 	for _, channel := range channels {
 		settings := withSiteCredentials(channel, channel.GetOtherSettings())
 		if settings.UpstreamAccessToken == "" {
+			if channel.Status == common.ChannelStatusEnabled && settings.UpstreamRechargeRate > 0 {
+				rateCandidates = append(rateCandidates, channel)
+			}
 			continue
 		}
 		key := strings.TrimRight(channel.GetBaseURL(), "/") + "|" + strings.TrimSpace(settings.UpstreamUserId) + "|" + strings.TrimSpace(settings.UpstreamAccessToken)
@@ -64,6 +69,33 @@ func syncUpstreamBills() {
 		}
 		time.Sleep(common.RequestInterval)
 	}
+	for _, channel := range rateCandidates {
+		refreshSub2APIRateMultiplier(channel)
+		time.Sleep(common.RequestInterval)
+	}
+}
+
+// refreshSub2APIRateMultiplier 用渠道 key 读 Sub2API 上游这把 key 当前生效的计费倍率（含高峰倍率），
+// 估算成本时代替手填的上游分组倍率。不是 Sub2API 站就什么都不做。
+func refreshSub2APIRateMultiplier(channel *model.Channel) {
+	switch channel.Type {
+	case constant.ChannelTypeOpenAI, constant.ChannelTypeAnthropic, constant.ChannelTypeCustom, constant.ChannelTypeSub2API:
+	default:
+		return
+	}
+	baseURL := strings.TrimRight(channel.GetBaseURL(), "/")
+	body, err := GetResponseBody(http.MethodGet, baseURL+"/v1/sub2api/billing", channel, GetAuthHeader(strings.TrimSpace(channel.Key)))
+	if err != nil {
+		return
+	}
+	var billing struct {
+		Object                  string   `json:"object"`
+		EffectiveRateMultiplier *float64 `json:"effective_rate_multiplier"`
+	}
+	if common.Unmarshal(body, &billing) != nil || billing.Object != "sub2api.key_billing" || billing.EffectiveRateMultiplier == nil {
+		return
+	}
+	service.SetUpstreamRateMultiplier(channel.Id, *billing.EffectiveRateMultiplier)
 }
 
 func syncSiteUpstreamBill(key string, channels []*model.Channel, settingsById map[int]dto.ChannelOtherSettings) error {

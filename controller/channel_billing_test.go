@@ -10,6 +10,7 @@ import (
 	"github.com/QuantumNous/new-api/common"
 	"github.com/QuantumNous/new-api/constant"
 	"github.com/QuantumNous/new-api/model"
+	"github.com/QuantumNous/new-api/service"
 	"github.com/QuantumNous/new-api/setting/operation_setting"
 	"github.com/glebarez/sqlite"
 	"github.com/stretchr/testify/assert"
@@ -63,7 +64,7 @@ func TestUpstreamAccountBalanceQueriesEachSiteOnce(t *testing.T) {
 	assert.Equal(t, int32(1), selfCalls.Load())
 }
 
-func TestSyncUpstreamBillsReplacesEstimateOnce(t *testing.T) {
+func TestSyncUpstreamBills(t *testing.T) {
 	common.SetDatabaseTypes(common.DatabaseTypeSQLite, common.DatabaseTypeSQLite)
 	common.RedisEnabled = false
 	db, err := gorm.Open(sqlite.Open("file:upstream_bill_sync?mode=memory&cache=shared"), &gorm.Config{})
@@ -102,6 +103,21 @@ func TestSyncUpstreamBillsReplacesEstimateOnce(t *testing.T) {
 	entry := &model.Log{Type: model.LogTypeConsume, ChannelId: 1, UpstreamRequestId: "up-ours", Other: `{"admin_info":{"upstream_cost":100}}`}
 	require.NoError(t, db.Create(entry).Error)
 
+	// a Sub2API upstream on another site: no access token, only its live rate multiplier is read
+	sub2 := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/v1/sub2api/billing" {
+			http.NotFound(w, r)
+			return
+		}
+		assert.Equal(t, "Bearer sk-sub2", r.Header.Get("Authorization"))
+		_, _ = w.Write([]byte(`{"object":"sub2api.key_billing","effective_rate_multiplier":0.055}`))
+	}))
+	t.Cleanup(sub2.Close)
+	sub2URL := sub2.URL
+	sub2Channel := &model.Channel{Id: 9002, Type: constant.ChannelTypeOpenAI, Name: "sub2", Key: "sk-sub2", BaseURL: &sub2URL,
+		Status: common.ChannelStatusEnabled, OtherSettings: `{"upstream_recharge_rate":1}`}
+	require.NoError(t, db.Create(sub2Channel).Error)
+
 	syncUpstreamBills()
 	syncUpstreamBills()
 
@@ -118,6 +134,10 @@ func TestSyncUpstreamBillsReplacesEstimateOnce(t *testing.T) {
 	require.NoError(t, db.First(&updated, channel.Id).Error)
 	assert.Equal(t, int64(25000), updated.UpstreamCost)
 	assert.Equal(t, int32(2), logQueries.Load())
+
+	multiplier, ok := service.UpstreamRateMultiplier(sub2Channel.Id)
+	require.True(t, ok)
+	assert.Equal(t, 0.055, multiplier)
 }
 
 func TestGetDeepSeekBalanceUSD(t *testing.T) {

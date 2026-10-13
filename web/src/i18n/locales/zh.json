@@ -7260,7 +7260,7 @@
     "Recharge rate (CNY per upstream $1)": "充值比例（上游 1 美元额度 = 多少元）",
     "Leave empty to skip estimation. Reconciled costs are then shown in upstream dollars": "留空则不估算；对账得到的实际成本按上游美元显示",
     "Upstream group ratio": "上游分组倍率",
-    "Group ratio of your key on the upstream site, defaults to 1": "你的 key 在上游站的分组倍率，默认 1",
+    "Group ratio of your key on the upstream site, defaults to 1. Sub2API sites are read automatically": "你的 key 在上游站的分组倍率，默认 1。Sub2API 站会自动读取上游当前倍率，不用填",
     "Upstream user ID": "上游用户 ID",
     "Required by older new-api sites, optional otherwise": "旧版 new-api 站需要填，其他可不填",
     "Upstream access token": "上游访问令牌",

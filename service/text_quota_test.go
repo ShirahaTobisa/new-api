@@ -725,9 +725,12 @@ func TestRecordTextUpstreamCostIgnoresLocalGroupRatio(t *testing.T) {
 	oldRate, oldBatch := operation_setting.USDExchangeRate, common.BatchUpdateEnabled
 	operation_setting.USDExchangeRate, common.BatchUpdateEnabled = 7.3, true
 	t.Cleanup(func() { operation_setting.USDExchangeRate, common.BatchUpdateEnabled = oldRate, oldBatch })
+	// channel 8 is a Sub2API upstream whose live multiplier was read by the bill sync
+	SetUpstreamRateMultiplier(8, 0.5)
+	t.Cleanup(func() { upstreamRateMultipliers.Delete(8) })
 
 	usage := &dto.Usage{PromptTokens: 1000, CompletionTokens: 200}
-	newInfo := func(groupRatio, rechargeRate float64) *relaycommon.RelayInfo {
+	newInfo := func(channelId int, groupRatio, rechargeRate float64) *relaycommon.RelayInfo {
 		return &relaycommon.RelayInfo{
 			RelayFormat:     types.RelayFormatOpenAI,
 			OriginModelName: "gpt-test",
@@ -738,7 +741,7 @@ func TestRecordTextUpstreamCostIgnoresLocalGroupRatio(t *testing.T) {
 				GroupRatioInfo:  hosttypes.GroupRatioInfo{GroupRatio: groupRatio},
 			},
 			ChannelMeta: &relaycommon.ChannelMeta{
-				ChannelId: 7,
+				ChannelId: channelId,
 				ChannelOtherSettings: dto.ChannelOtherSettings{
 					UpstreamRechargeRate: rechargeRate,
 					UpstreamGroupRatio:   2,
@@ -749,18 +752,21 @@ func TestRecordTextUpstreamCostIgnoresLocalGroupRatio(t *testing.T) {
 
 	tests := []struct {
 		name         string
+		channelId    int
 		groupRatio   float64
 		rechargeRate float64
 		wantCost     any
 	}{
 		// 1400 quota at group ratio 1, x2 upstream group ratio, x0.73 CNY per upstream $ / 7.3 CNY per $
-		{name: "free local group still costs upstream", groupRatio: 0, rechargeRate: 0.73, wantCost: 280},
-		{name: "discounted local group", groupRatio: 0.1, rechargeRate: 0.73, wantCost: 280},
-		{name: "no recharge rate skips estimation", groupRatio: 1, rechargeRate: 0, wantCost: nil},
+		{name: "free local group still costs upstream", channelId: 7, groupRatio: 0, rechargeRate: 0.73, wantCost: 280},
+		{name: "discounted local group", channelId: 7, groupRatio: 0.1, rechargeRate: 0.73, wantCost: 280},
+		{name: "no recharge rate skips estimation", channelId: 7, groupRatio: 1, rechargeRate: 0, wantCost: nil},
+		// live multiplier 0.5 replaces the manual upstream group ratio 2: 1400 x0.5 x0.1
+		{name: "live upstream multiplier replaces manual ratio", channelId: 8, groupRatio: 1, rechargeRate: 0.73, wantCost: 70},
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
-			info := newInfo(tc.groupRatio, tc.rechargeRate)
+			info := newInfo(tc.channelId, tc.groupRatio, tc.rechargeRate)
 			summary := calculateTextQuotaSummary(ctx, info, usage)
 			other := model.NewLogOther()
 			recordTextUpstreamCost(ctx, info, usage, billingexpr.TokenParams{}, summary, other)

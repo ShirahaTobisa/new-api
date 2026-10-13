@@ -7260,7 +7260,7 @@
     "Recharge rate (CNY per upstream $1)": "Recharge rate (CNY per upstream $1)",
     "Leave empty to skip estimation. Reconciled costs are then shown in upstream dollars": "Leave empty to skip estimation. Reconciled costs are then shown in upstream dollars",
     "Upstream group ratio": "Upstream group ratio",
-    "Group ratio of your key on the upstream site, defaults to 1": "Group ratio of your key on the upstream site, defaults to 1",
+    "Group ratio of your key on the upstream site, defaults to 1. Sub2API sites are read automatically": "Group ratio of your key on the upstream site, defaults to 1. Sub2API sites are read automatically",
     "Upstream user ID": "Upstream user ID",
     "Required by older new-api sites, optional otherwise": "Required by older new-api sites, optional otherwise",
     "Upstream access token": "Upstream access token",

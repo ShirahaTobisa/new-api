@@ -1,6 +1,8 @@
 package service
 
 import (
+	"sync"
+
 	"github.com/QuantumNous/new-api/common"
 	"github.com/QuantumNous/new-api/model"
 	"github.com/QuantumNous/new-api/pkg/billingexpr"
@@ -11,6 +13,22 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/shopspring/decimal"
 )
+
+// upstreamRateMultipliers Sub2API 上游当前生效的计费倍率（渠道 ID → 倍率，含高峰倍率），
+// 由对账任务定时刷新；有值时优先于渠道里手填的上游分组倍率
+var upstreamRateMultipliers sync.Map
+
+func SetUpstreamRateMultiplier(channelId int, multiplier float64) {
+	upstreamRateMultipliers.Store(channelId, multiplier)
+}
+
+func UpstreamRateMultiplier(channelId int) (float64, bool) {
+	multiplier, ok := upstreamRateMultipliers.Load(channelId)
+	if !ok {
+		return 0, false
+	}
+	return multiplier.(float64), true
+}
 
 // UpstreamAmountToLocal 把上游站的美元额度按渠道的充值比例折算成本站美元；没填充值比例时原样返回。
 func UpstreamAmountToLocal(amount decimal.Decimal, settings dto.ChannelOtherSettings) decimal.Decimal {
@@ -45,6 +63,9 @@ func recordTextUpstreamCost(ctx *gin.Context, relayInfo *relaycommon.RelayInfo, 
 	upstreamGroupRatio := settings.UpstreamGroupRatio
 	if upstreamGroupRatio <= 0 {
 		upstreamGroupRatio = 1
+	}
+	if multiplier, ok := UpstreamRateMultiplier(relayInfo.ChannelId); ok {
+		upstreamGroupRatio = multiplier
 	}
 	amount := decimal.NewFromInt(int64(baseQuota)).Mul(decimal.NewFromFloat(upstreamGroupRatio))
 	cost := common.QuotaFromDecimal(UpstreamAmountToLocal(amount, settings))

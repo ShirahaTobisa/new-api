@@ -127,7 +127,7 @@ export function UpstreamBillingSettings() {
         <SettingInput
           label={t('Upstream group ratio')}
           description={t(
-            'Group ratio of your key on the upstream site, defaults to 1'
+            'Group ratio of your key on the upstream site, defaults to 1. Sub2API sites are read automatically'
           )}
           value={settings.upstream_group_ratio}
           numeric
