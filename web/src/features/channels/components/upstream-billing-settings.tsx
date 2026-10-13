@@ -110,14 +110,16 @@ export function UpstreamBillingSettings() {
         <Label>{t('Upstream cost and balance')}</Label>
         <p className='text-muted-foreground text-sm'>
           {t(
-            'Estimate what each request costs on the upstream site, and query your account balance there instead of the key quota'
+            'Track what each request costs on the upstream site and your account balance there. Sites with an access token are reconciled against the upstream bill for the exact charge'
           )}
         </p>
       </div>
       <div className='grid gap-4 sm:grid-cols-2'>
         <SettingInput
           label={t('Recharge rate (CNY per upstream $1)')}
-          description={t('Leave empty to skip cost estimation')}
+          description={t(
+            'Leave empty to skip estimation. Reconciled costs are then shown in upstream dollars'
+          )}
           value={settings.upstream_recharge_rate}
           numeric
           onChange={(text) => update('upstream_recharge_rate', text, true)}
@@ -140,7 +142,7 @@ export function UpstreamBillingSettings() {
         <SettingInput
           label={t('Upstream access token')}
           description={t(
-            'For new-api / one-api sites, create an access token in your personal settings there. Fill it in one channel per site, the other channels of that site share it. Sub2API sites need nothing here'
+            'For new-api / one-api sites, create an access token in your personal settings there with the Profile and Usage view permissions. Fill it in one channel per site, the other channels of that site share it. Sub2API sites need nothing here'
           )}
           value={settings.upstream_access_token}
           secret

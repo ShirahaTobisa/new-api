@@ -129,6 +129,14 @@ func main() {
 		go controller.AutomaticallyUpdateChannels(frequency)
 	}
 
+	if os.Getenv("UPSTREAM_BILL_SYNC_FREQUENCY") != "" {
+		frequency, err := strconv.Atoi(os.Getenv("UPSTREAM_BILL_SYNC_FREQUENCY"))
+		if err != nil {
+			common.FatalLog(common.LogText("failed to parse UPSTREAM_BILL_SYNC_FREQUENCY: %s", err.Error()))
+		}
+		go controller.AutomaticallySyncUpstreamBills(frequency)
+	}
+
 	// Codex credential auto-refresh check every 10 minutes, refresh when expires within 1 day
 	service.StartCodexCredentialAutoRefreshTask()
 

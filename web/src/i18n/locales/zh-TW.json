@@ -7254,17 +7254,18 @@
     "Zhipu V4": "智譜 V4",
     "Zoom": "縮放",
     "Cost:": "成本：",
-    "Estimated upstream cost since the cost settings were enabled": "開啟成本設定後累計的上游成本估算",
+    "Upstream cost since the cost settings were enabled. Reconciled requests use the actual upstream charge, the rest are estimates": "開啟成本設定後累計的上游成本：已和上游帳單對上的按實際扣費算，其餘為估算",
     "Upstream cost and balance": "上游成本與餘額",
-    "Estimate what each request costs on the upstream site, and query your account balance there instead of the key quota": "估算每次請求在上游站實際花的錢，並查詢你在上游站的帳戶餘額（而不是這個 key 的額度）",
+    "Track what each request costs on the upstream site and your account balance there. Sites with an access token are reconciled against the upstream bill for the exact charge": "記錄每次請求在上游站花了多少錢、你在上游站還剩多少餘額。填了存取權杖的站會和上游帳單逐條對帳，得到實際扣費",
     "Recharge rate (CNY per upstream $1)": "儲值比例（上游 1 美元額度 = 多少元）",
-    "Leave empty to skip cost estimation": "留空則不估算成本",
+    "Leave empty to skip estimation. Reconciled costs are then shown in upstream dollars": "留空則不估算；對帳得到的實際成本按上游美元顯示",
     "Upstream group ratio": "上游分組倍率",
     "Group ratio of your key on the upstream site, defaults to 1": "你的 key 在上游站的分組倍率，預設 1",
     "Upstream user ID": "上游使用者 ID",
     "Required by older new-api sites, optional otherwise": "舊版 new-api 站需要填，其他可不填",
     "Upstream access token": "上游存取權杖",
-    "For new-api / one-api sites, create an access token in your personal settings there. Fill it in one channel per site, the other channels of that site share it. Sub2API sites need nothing here": "new-api / one-api 站：在對方站的個人設定裡產生存取權杖填到這裡。同一個站只需在一個渠道裡填，其他渠道自動共用。Sub2API 站不用填",
-    "Estimated upstream cost": "上游成本（估算）"
+    "For new-api / one-api sites, create an access token in your personal settings there with the Profile and Usage view permissions. Fill it in one channel per site, the other channels of that site share it. Sub2API sites need nothing here": "new-api / one-api 站：在對方站的個人設定裡產生存取權杖，新版要勾選「個人資料 → 查看」和「用量 → 查看」。同一個站只需在一個渠道裡填，其他渠道自動共用。Sub2API 站不用填",
+    "Estimated upstream cost": "上游成本（估算）",
+    "Actual upstream cost": "上游成本（實際）"
   }
 }

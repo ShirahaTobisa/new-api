@@ -63,6 +63,63 @@ func TestUpstreamAccountBalanceQueriesEachSiteOnce(t *testing.T) {
 	assert.Equal(t, int32(1), selfCalls.Load())
 }
 
+func TestSyncUpstreamBillsReplacesEstimateOnce(t *testing.T) {
+	common.SetDatabaseTypes(common.DatabaseTypeSQLite, common.DatabaseTypeSQLite)
+	common.RedisEnabled = false
+	db, err := gorm.Open(sqlite.Open("file:upstream_bill_sync?mode=memory&cache=shared"), &gorm.Config{})
+	require.NoError(t, err)
+	require.NoError(t, db.AutoMigrate(&model.Channel{}, &model.Log{}))
+	oldDB, oldLogDB, oldRate, oldBatch := model.DB, model.LOG_DB, operation_setting.USDExchangeRate, common.BatchUpdateEnabled
+	model.DB, model.LOG_DB, operation_setting.USDExchangeRate, common.BatchUpdateEnabled = db, db, 7.3, false
+	t.Cleanup(func() {
+		model.DB, model.LOG_DB, operation_setting.USDExchangeRate, common.BatchUpdateEnabled = oldDB, oldLogDB, oldRate, oldBatch
+		if sqlDB, err := db.DB(); err == nil {
+			_ = sqlDB.Close()
+		}
+	})
+
+	var logQueries atomic.Int32
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/api/log/self":
+			logQueries.Add(1)
+			assert.Equal(t, "Bearer upstream-token", r.Header.Get("Authorization"))
+			_, _ = w.Write([]byte(`{"success":true,"data":{"items":[
+				{"request_id":"up-ours","quota":250000,"created_at":1700000000},
+				{"request_id":"up-not-ours","quota":999999,"created_at":1700000000}]}}`))
+		case "/api/status":
+			_, _ = w.Write([]byte(`{"success":true,"data":{"quota_per_unit":500000}}`))
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	t.Cleanup(upstream.Close)
+
+	baseURL := upstream.URL
+	channel := &model.Channel{Id: 1, Type: constant.ChannelTypeOpenAI, Name: "site", Key: "sk-a", BaseURL: &baseURL, UpstreamCost: 100,
+		OtherSettings: `{"upstream_access_token":"upstream-token","upstream_recharge_rate":0.73}`}
+	require.NoError(t, db.Create(channel).Error)
+	entry := &model.Log{Type: model.LogTypeConsume, ChannelId: 1, UpstreamRequestId: "up-ours", Other: `{"admin_info":{"upstream_cost":100}}`}
+	require.NoError(t, db.Create(entry).Error)
+
+	syncUpstreamBills()
+	syncUpstreamBills()
+
+	// 250000 / 500000 = 0.5 upstream $, x0.73 CNY per upstream $ / 7.3 CNY per $ = 0.05 $ = 25000 quota
+	var synced model.Log
+	require.NoError(t, db.First(&synced, entry.Id).Error)
+	var other map[string]any
+	require.NoError(t, common.UnmarshalJsonStr(synced.Other, &other))
+	adminInfo := other["admin_info"].(map[string]any)
+	assert.Equal(t, float64(25000), adminInfo["upstream_cost"])
+	assert.Equal(t, true, adminInfo["upstream_cost_exact"])
+
+	var updated model.Channel
+	require.NoError(t, db.First(&updated, channel.Id).Error)
+	assert.Equal(t, int64(25000), updated.UpstreamCost)
+	assert.Equal(t, int32(2), logQueries.Load())
+}
+
 func TestGetDeepSeekBalanceUSD(t *testing.T) {
 	tests := []struct {
 		name            string

@@ -78,14 +78,36 @@ func updateUpstreamAccountBalance(channel *model.Channel, settings dto.ChannelOt
 	return balance, nil
 }
 
-// fetchUpstreamAccountUSD 调上游 /api/user/self 读账户额度，按上游的每美元额度换算成上游美元。
-func fetchUpstreamAccountUSD(channel *model.Channel, baseURL string, userId string, token string) (decimal.Decimal, error) {
+// upstreamAuthHeaders 用账户令牌访问上游 new-api 站的请求头：新版只认令牌，旧版还要 New-Api-User
+func upstreamAuthHeaders(userId string, token string) http.Header {
 	headers := http.Header{}
 	headers.Set("Authorization", "Bearer "+token)
 	if userId != "" {
 		headers.Set("New-Api-User", userId)
 	}
-	body, err := GetResponseBody(http.MethodGet, baseURL+"/api/user/self", channel, headers)
+	return headers
+}
+
+// upstreamQuotaPerUnit 上游站每美元对应的额度：站长可能改过，读不到时按默认值 500000 算
+func upstreamQuotaPerUnit(channel *model.Channel, baseURL string) float64 {
+	body, err := GetResponseBody(http.MethodGet, baseURL+"/api/status", channel, nil)
+	if err != nil {
+		return 500000
+	}
+	var status struct {
+		Data struct {
+			QuotaPerUnit float64 `json:"quota_per_unit"`
+		} `json:"data"`
+	}
+	if common.Unmarshal(body, &status) != nil || status.Data.QuotaPerUnit <= 0 {
+		return 500000
+	}
+	return status.Data.QuotaPerUnit
+}
+
+// fetchUpstreamAccountUSD 调上游 /api/user/self 读账户额度，按上游的每美元额度换算成上游美元。
+func fetchUpstreamAccountUSD(channel *model.Channel, baseURL string, userId string, token string) (decimal.Decimal, error) {
+	body, err := GetResponseBody(http.MethodGet, baseURL+"/api/user/self", channel, upstreamAuthHeaders(userId, token))
 	if err != nil {
 		return decimal.Zero, err
 	}
@@ -102,20 +124,7 @@ func fetchUpstreamAccountUSD(channel *model.Channel, baseURL string, userId stri
 	if !self.Success || self.Data.Quota == nil {
 		return decimal.Zero, fmt.Errorf("upstream account query failed: %s", self.Message)
 	}
-
-	// 上游站可能改过每美元对应的额度，读不到时按默认值 500000 算
-	quotaPerUnit := 500000.0
-	if body, err := GetResponseBody(http.MethodGet, baseURL+"/api/status", channel, nil); err == nil {
-		var status struct {
-			Data struct {
-				QuotaPerUnit float64 `json:"quota_per_unit"`
-			} `json:"data"`
-		}
-		if common.Unmarshal(body, &status) == nil && status.Data.QuotaPerUnit > 0 {
-			quotaPerUnit = status.Data.QuotaPerUnit
-		}
-	}
-
+	quotaPerUnit := upstreamQuotaPerUnit(channel, baseURL)
 	return decimal.NewFromFloat(*self.Data.Quota).Div(decimal.NewFromFloat(quotaPerUnit)), nil
 }
 

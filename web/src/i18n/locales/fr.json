@@ -7254,17 +7254,18 @@
     "Zhipu V4": "Zhipu V4",
     "Zoom": "Zoom",
     "Cost:": "Cost:",
-    "Estimated upstream cost since the cost settings were enabled": "Estimated upstream cost since the cost settings were enabled",
+    "Upstream cost since the cost settings were enabled. Reconciled requests use the actual upstream charge, the rest are estimates": "Upstream cost since the cost settings were enabled. Reconciled requests use the actual upstream charge, the rest are estimates",
     "Upstream cost and balance": "Upstream cost and balance",
-    "Estimate what each request costs on the upstream site, and query your account balance there instead of the key quota": "Estimate what each request costs on the upstream site, and query your account balance there instead of the key quota",
+    "Track what each request costs on the upstream site and your account balance there. Sites with an access token are reconciled against the upstream bill for the exact charge": "Track what each request costs on the upstream site and your account balance there. Sites with an access token are reconciled against the upstream bill for the exact charge",
     "Recharge rate (CNY per upstream $1)": "Recharge rate (CNY per upstream $1)",
-    "Leave empty to skip cost estimation": "Leave empty to skip cost estimation",
+    "Leave empty to skip estimation. Reconciled costs are then shown in upstream dollars": "Leave empty to skip estimation. Reconciled costs are then shown in upstream dollars",
     "Upstream group ratio": "Upstream group ratio",
     "Group ratio of your key on the upstream site, defaults to 1": "Group ratio of your key on the upstream site, defaults to 1",
     "Upstream user ID": "Upstream user ID",
     "Required by older new-api sites, optional otherwise": "Required by older new-api sites, optional otherwise",
     "Upstream access token": "Upstream access token",
-    "For new-api / one-api sites, create an access token in your personal settings there. Fill it in one channel per site, the other channels of that site share it. Sub2API sites need nothing here": "For new-api / one-api sites, create an access token in your personal settings there. Fill it in one channel per site, the other channels of that site share it. Sub2API sites need nothing here",
-    "Estimated upstream cost": "Estimated upstream cost"
+    "For new-api / one-api sites, create an access token in your personal settings there with the Profile and Usage view permissions. Fill it in one channel per site, the other channels of that site share it. Sub2API sites need nothing here": "For new-api / one-api sites, create an access token in your personal settings there with the Profile and Usage view permissions. Fill it in one channel per site, the other channels of that site share it. Sub2API sites need nothing here",
+    "Estimated upstream cost": "Estimated upstream cost",
+    "Actual upstream cost": "Actual upstream cost"
   }
 }

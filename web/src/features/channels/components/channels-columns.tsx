@@ -570,7 +570,7 @@ export function BalanceCell({ channel }: { channel: Channel }) {
             <TooltipContent>
               <p>
                 {t(
-                  'Estimated upstream cost since the cost settings were enabled'
+                  'Upstream cost since the cost settings were enabled. Reconciled requests use the actual upstream charge, the rest are estimates'
                 )}
               </p>
             </TooltipContent>
