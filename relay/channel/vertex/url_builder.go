@@ -37,6 +37,11 @@ func appendVertexAPIVersion(baseURL, version string) string {
 
 func BuildAPIBaseURL(baseURL, version, projectID, region string) string {
 	if normalized := normalizeVertexBaseURL(baseURL); normalized != "" {
+		// 地址里已写明项目和地区（如 .../v1/projects/P/locations/global）就原样使用：
+		// API Key 模式不带项目路径时，Google 会自行分配地区，可能落到模型没上线的地区
+		if strings.Contains(normalized, "/projects/") {
+			return normalized
+		}
 		normalized = appendVertexAPIVersion(normalized, version)
 
 		region = normalizeVertexRegion(region)
