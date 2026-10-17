@@ -308,9 +308,19 @@ func GeminiChatStreamHandler(c *gin.Context, info *relaycommon.RelayInfo, resp *
 	finishReason := constant.FinishReasonStop
 	toolCallIndexByChoice := make(map[int]map[string]int)
 	nextToolCallIndexByChoice := make(map[int]int)
+	partialCalls := relayconvert.NewGeminiPartialFunctionCallStream()
 
 	usage, err := geminiStreamHandler(c, info, resp, func(data string, geminiResponse *dto.GeminiChatResponse) bool {
-		response, isStop := streamResponseGeminiChat2OpenAI(geminiResponse)
+		// Function calls streamed piecewise (streamFunctionCallArguments) become argument deltas.
+		prepared, prepareErr := partialCalls.Prepare(geminiResponse)
+		if prepareErr != nil {
+			logger.LogError(c, prepareErr.Error())
+			prepared = geminiResponse
+		}
+		response, isStop := streamResponseGeminiChat2OpenAI(prepared)
+		if response == nil {
+			return true
+		}
 
 		response.Id = id
 		response.Created = createAt

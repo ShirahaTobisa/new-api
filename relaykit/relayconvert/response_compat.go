@@ -145,6 +145,15 @@ func StreamResponseGeminiChat2OpenAI(geminiResponse *dto.GeminiChatResponse) (*d
 	return geminichat.StreamResponseGeminiChat2OpenAI(geminiResponse)
 }
 
+// GeminiPartialFunctionCallStream folds Gemini's piecewise function calls into
+// tool-call deltas for callers that convert chunks with
+// StreamResponseGeminiChat2OpenAI themselves.
+type GeminiPartialFunctionCallStream = geminichat.PartialFunctionCallStream
+
+func NewGeminiPartialFunctionCallStream() *GeminiPartialFunctionCallStream {
+	return geminichat.NewPartialFunctionCallStream()
+}
+
 func ChatCompletionsResponseToResponsesResponse(resp *dto.OpenAITextResponse, id string) (*dto.OpenAIResponsesResponse, *dto.Usage, error) {
 	return oaichat.ChatCompletionsResponseToResponsesResponse(resp, id)
 }

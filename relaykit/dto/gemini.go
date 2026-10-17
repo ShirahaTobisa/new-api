@@ -295,6 +295,11 @@ type FunctionCall struct {
 	Arguments    any                `json:"args"`
 	PartialArgs  []GeminiPartialArg `json:"partialArgs,omitempty"`
 	WillContinue *bool              `json:"willContinue,omitempty"`
+
+	// StreamedArguments is a ready-to-send fragment of the OpenAI arguments
+	// text for a function call whose arguments arrive piecewise. The stream
+	// converter sets it; it is never serialized.
+	StreamedArguments *string `json:"-"`
 }
 
 type GeminiPartialArg struct {

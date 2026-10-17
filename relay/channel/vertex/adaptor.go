@@ -5,6 +5,8 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"regexp"
+	"strconv"
 	"strings"
 
 	"github.com/QuantumNous/new-api/common"
@@ -302,12 +304,37 @@ func (a *Adaptor) ConvertOpenAIRequest(c *gin.Context, info *relaycommon.RelayIn
 		if model_setting.GetGeminiSettings().RemoveFunctionResponseIdEnabled {
 			removeFunctionCallIDs(geminiRequest)
 		}
+		if info.IsStream && len(geminiRequest.Tools) > 0 && geminiStreamsFunctionCallArguments(info.UpstreamModelName) {
+			// Gemini 3+ on Vertex can send function-call arguments piecewise; the
+			// chat converter turns the pieces into tool_call argument deltas.
+			if geminiRequest.ToolConfig == nil {
+				geminiRequest.ToolConfig = &dto.ToolConfig{}
+			}
+			if geminiRequest.ToolConfig.FunctionCallingConfig == nil {
+				geminiRequest.ToolConfig.FunctionCallingConfig = &dto.FunctionCallingConfig{}
+			}
+			geminiRequest.ToolConfig.FunctionCallingConfig.StreamFunctionCallArguments = lo.ToPtr(true)
+		}
 		c.Set("request_model", request.Model)
 		return geminiRequest, nil
 	} else if a.RequestMode == RequestModeOpenSource {
 		return request, nil
 	}
 	return nil, errors.New("unsupported request mode")
+}
+
+var geminiMajorVersion = regexp.MustCompile("gemini-([0-9]+)")
+
+// geminiStreamsFunctionCallArguments reports whether the model generation
+// accepts toolConfig.functionCallingConfig.streamFunctionCallArguments
+// (Gemini 3 and later).
+func geminiStreamsFunctionCallArguments(model string) bool {
+	match := geminiMajorVersion.FindStringSubmatch(strings.ToLower(model))
+	if match == nil {
+		return false
+	}
+	major, err := strconv.Atoi(match[1])
+	return err == nil && major >= 3
 }
 
 func (a *Adaptor) ConvertRerankRequest(c *gin.Context, relayMode int, request dto.RerankRequest) (any, error) {

@@ -301,15 +301,31 @@ type GeminiToChatStreamState struct {
 	// occurrence indexes monotonic because chunk-local indexes restart at zero.
 	nextToolIndexByCandidate map[int64]int
 	toolIndexByCandidateID   map[int64]map[string]int
-	partialToolByCandidate   map[int64]*geminiPartialToolCall
+	partials                 *PartialFunctionCallStream
 	groundingByCandidate     map[int64]*geminiGroundingStreamCandidate
 	sentGroundingAnnotations map[string]struct{}
+}
+
+// PartialFunctionCallStream turns the pieces of a function call that Gemini
+// streams with streamFunctionCallArguments into OpenAI argument deltas, one
+// upstream stream at a time. Top-level string members are written out
+// fragment by fragment (Gemini sends a member's fragments in order);
+// everything else is reconstructed and written whole when the call completes.
+type PartialFunctionCallStream struct {
+	byCandidate map[int64]*geminiPartialToolCall
+}
+
+func NewPartialFunctionCallStream() *PartialFunctionCallStream {
+	return &PartialFunctionCallStream{byCandidate: make(map[int64]*geminiPartialToolCall)}
 }
 
 type geminiPartialToolCall struct {
 	id        string
 	name      string
-	arguments map[string]interface{}
+	arguments map[string]any
+	started   bool            // "{" and the function name have been emitted
+	open      string          // top-level string member currently being written
+	sent      map[string]bool // top-level members already written
 }
 
 type geminiPartialArgPathSegment struct {
@@ -333,7 +349,7 @@ func NewGeminiToChatStreamState(id string, created int64) *GeminiToChatStreamSta
 		created:                  created,
 		nextToolIndexByCandidate: make(map[int64]int),
 		toolIndexByCandidateID:   make(map[int64]map[string]int),
-		partialToolByCandidate:   make(map[int64]*geminiPartialToolCall),
+		partials:                 NewPartialFunctionCallStream(),
 		groundingByCandidate:     make(map[int64]*geminiGroundingStreamCandidate),
 		sentGroundingAnnotations: make(map[string]struct{}),
 	}
@@ -355,11 +371,11 @@ func (s *GeminiToChatStreamState) ConvertChunk(geminiResponse *dto.GeminiChatRes
 	if s.toolIndexByCandidateID == nil {
 		s.toolIndexByCandidateID = make(map[int64]map[string]int)
 	}
-	if s.partialToolByCandidate == nil {
-		s.partialToolByCandidate = make(map[int64]*geminiPartialToolCall)
+	if s.partials == nil {
+		s.partials = NewPartialFunctionCallStream()
 	}
 	var err error
-	geminiResponse, err = s.preparePartialFunctionCalls(geminiResponse)
+	geminiResponse, err = s.partials.Prepare(geminiResponse)
 	if err != nil {
 		return nil, err
 	}
@@ -445,16 +461,16 @@ func (s *GeminiToChatStreamState) Finalize(model string) ([]*dto.ChatCompletions
 	if s == nil {
 		return nil, nil
 	}
-	if len(s.partialToolByCandidate) > 0 {
-		candidateIndexes := make([]int64, 0, len(s.partialToolByCandidate))
-		for candidateIndex := range s.partialToolByCandidate {
+	if s.partials != nil && len(s.partials.byCandidate) > 0 {
+		candidateIndexes := make([]int64, 0, len(s.partials.byCandidate))
+		for candidateIndex := range s.partials.byCandidate {
 			candidateIndexes = append(candidateIndexes, candidateIndex)
 		}
 		sort.Slice(candidateIndexes, func(i, j int) bool {
 			return candidateIndexes[i] < candidateIndexes[j]
 		})
 		candidateIndex := candidateIndexes[0]
-		partial := s.partialToolByCandidate[candidateIndex]
+		partial := s.partials.byCandidate[candidateIndex]
 		return nil, fmt.Errorf("Gemini stream ended with an incomplete function call for candidate %d (id %q, name %q)", candidateIndex, partial.id, partial.name)
 	}
 	if s.finishEmitted {
@@ -470,7 +486,10 @@ func (s *GeminiToChatStreamState) Usage() *dto.Usage {
 	return s.latestUsage
 }
 
-func (s *GeminiToChatStreamState) preparePartialFunctionCalls(response *dto.GeminiChatResponse) (*dto.GeminiChatResponse, error) {
+// Prepare rewrites one upstream chunk so that every piecewise function call in
+// it becomes the tool-call delta to emit for that chunk (or disappears when
+// the chunk adds nothing visible); complete calls pass through untouched.
+func (p *PartialFunctionCallStream) Prepare(response *dto.GeminiChatResponse) (*dto.GeminiChatResponse, error) {
 	prepared := *response
 	prepared.Candidates = append([]dto.GeminiChatCandidate(nil), response.Candidates...)
 	for candidateIndex := range prepared.Candidates {
@@ -478,46 +497,67 @@ func (s *GeminiToChatStreamState) preparePartialFunctionCalls(response *dto.Gemi
 		parts := make([]dto.GeminiPart, 0, len(candidate.Content.Parts))
 		for _, part := range candidate.Content.Parts {
 			call := part.FunctionCall
-			if call == nil || (s.partialToolByCandidate[candidate.Index] == nil && call.WillContinue == nil && len(call.PartialArgs) == 0) {
+			if call == nil || (p.byCandidate[candidate.Index] == nil && call.WillContinue == nil && len(call.PartialArgs) == 0) {
 				parts = append(parts, part)
 				continue
 			}
-			completed, ready, err := s.appendPartialFunctionCall(candidate.Index, call)
+			streamed, err := p.streamPartialFunctionCall(candidate.Index, call)
 			if err != nil {
-				return nil, fmt.Errorf("reconstruct Gemini streamed function arguments: %w", err)
+				return nil, fmt.Errorf("stream Gemini function arguments: %w", err)
 			}
-			if ready {
-				part.FunctionCall = completed
-				parts = append(parts, part)
+			if streamed == nil {
+				continue
 			}
+			part.FunctionCall = streamed
+			parts = append(parts, part)
 		}
 		candidate.Content.Parts = parts
 	}
 	return &prepared, nil
 }
 
-func (s *GeminiToChatStreamState) appendPartialFunctionCall(candidateIndex int64, call *dto.FunctionCall) (*dto.FunctionCall, bool, error) {
-	current := s.partialToolByCandidate[candidateIndex]
+// streamPartialFunctionCall folds one streamed piece of a function call into
+// the per-candidate state and returns the tool-call delta to emit for it, or
+// nil when the piece adds nothing visible.
+func (p *PartialFunctionCallStream) streamPartialFunctionCall(candidateIndex int64, call *dto.FunctionCall) (*dto.FunctionCall, error) {
+	current := p.byCandidate[candidateIndex]
 	if current == nil {
-		current = &geminiPartialToolCall{arguments: make(map[string]interface{})}
-		s.partialToolByCandidate[candidateIndex] = current
+		if call.WillContinue != nil && !*call.WillContinue && len(call.PartialArgs) == 0 && call.Arguments != nil {
+			// Already complete in its first piece.
+			return &dto.FunctionCall{ID: call.ID, FunctionName: call.FunctionName, Arguments: call.Arguments}, nil
+		}
+		current = &geminiPartialToolCall{arguments: make(map[string]any), sent: make(map[string]bool)}
+		p.byCandidate[candidateIndex] = current
 	}
 	if id := strings.TrimSpace(call.ID); id != "" {
 		if current.id != "" && current.id != id {
-			return nil, false, fmt.Errorf("candidate %d function call changed id from %q to %q", candidateIndex, current.id, id)
+			return nil, fmt.Errorf("candidate %d function call changed id from %q to %q", candidateIndex, current.id, id)
 		}
 		current.id = id
 	}
 	if name := strings.TrimSpace(call.FunctionName); name != "" {
 		if current.name != "" && current.name != name {
-			return nil, false, fmt.Errorf("candidate %d function call changed name from %q to %q", candidateIndex, current.name, name)
+			return nil, fmt.Errorf("candidate %d function call changed name from %q to %q", candidateIndex, current.name, name)
 		}
 		current.name = name
+	}
+	var delta strings.Builder
+	name := ""
+	if !current.started {
+		if current.name == "" {
+			return nil, fmt.Errorf("candidate %d started a streamed function call without a name", candidateIndex)
+		}
+		if current.id == "" {
+			current.id = fmt.Sprintf("call_%s", kitutil.GetUUID())
+		}
+		current.started = true
+		name = current.name
+		delta.WriteByte('{')
 	}
 	for _, partial := range call.PartialArgs {
 		path, err := parseGeminiPartialArgPath(partial.JSONPath)
 		if err != nil {
-			return nil, false, err
+			return nil, err
 		}
 		value, present := geminiPartialArgValue(partial)
 		if !present {
@@ -525,23 +565,88 @@ func (s *GeminiToChatStreamState) appendPartialFunctionCall(candidateIndex int64
 		}
 		updated, err := setGeminiPartialArgValue(current.arguments, path, value, partial.StringValue != nil)
 		if err != nil {
-			return nil, false, fmt.Errorf("set partial argument %q: %w", partial.JSONPath, err)
+			return nil, fmt.Errorf("set partial argument %q: %w", partial.JSONPath, err)
 		}
-		arguments, ok := updated.(map[string]interface{})
+		arguments, ok := updated.(map[string]any)
 		if !ok {
-			return nil, false, fmt.Errorf("partial argument path %q replaced the arguments object", partial.JSONPath)
+			return nil, fmt.Errorf("partial argument path %q replaced the arguments object", partial.JSONPath)
 		}
 		current.arguments = arguments
+		if len(path) != 1 || path[0].isIndex {
+			continue // nested values are written whole when the call completes
+		}
+		member := path[0].member
+		if text, isString := value.(string); isString && partial.StringValue != nil {
+			if current.open != member {
+				current.writeMemberStart(&delta, member)
+				delta.WriteByte('"')
+				current.open = member
+			}
+			delta.WriteString(jsonStringBody(text))
+			continue
+		}
+		current.writeMemberStart(&delta, member)
+		delta.WriteString(jsonText(value))
 	}
 	if call.WillContinue != nil && *call.WillContinue {
-		return nil, false, nil
+		if delta.Len() == 0 {
+			return nil, nil
+		}
+		fragment := delta.String()
+		return &dto.FunctionCall{ID: current.id, FunctionName: name, StreamedArguments: &fragment}, nil
 	}
-	if current.name == "" {
-		return nil, false, fmt.Errorf("candidate %d completed a partial function call without a name", candidateIndex)
+	current.closeOpenMember(&delta)
+	pending := make([]string, 0, len(current.arguments))
+	for member := range current.arguments {
+		if !current.sent[member] {
+			pending = append(pending, member)
+		}
 	}
-	completed := &dto.FunctionCall{ID: current.id, FunctionName: current.name, Arguments: current.arguments}
-	delete(s.partialToolByCandidate, candidateIndex)
-	return completed, true, nil
+	sort.Strings(pending)
+	for _, member := range pending {
+		current.writeMemberStart(&delta, member)
+		delta.WriteString(jsonText(current.arguments[member]))
+	}
+	delta.WriteByte('}')
+	delete(p.byCandidate, candidateIndex)
+	fragment := delta.String()
+	return &dto.FunctionCall{ID: current.id, FunctionName: name, StreamedArguments: &fragment}, nil
+}
+
+// writeMemberStart closes the member being written, if any, and opens the
+// next one as `"member":`, with a leading comma after the first member.
+func (c *geminiPartialToolCall) writeMemberStart(delta *strings.Builder, member string) {
+	c.closeOpenMember(delta)
+	if len(c.sent) > 0 {
+		delta.WriteByte(',')
+	}
+	delta.WriteString(jsonText(member))
+	delta.WriteByte(':')
+	c.sent[member] = true
+}
+
+func (c *geminiPartialToolCall) closeOpenMember(delta *strings.Builder) {
+	if c.open == "" {
+		return
+	}
+	delta.WriteByte('"')
+	c.open = ""
+}
+
+// jsonText is the JSON encoding of a value that is known to encode.
+func jsonText(value any) string {
+	encoded, err := kitutil.Marshal(value)
+	if err != nil {
+		return "null"
+	}
+	return string(encoded)
+}
+
+// jsonStringBody is the JSON encoding of text without its surrounding quotes,
+// so fragments can be appended inside an open string.
+func jsonStringBody(text string) string {
+	encoded := jsonText(text)
+	return encoded[1 : len(encoded)-1]
 }
 
 func parseGeminiPartialArgPath(jsonPath string) ([]geminiPartialArgPathSegment, error) {
@@ -720,6 +825,16 @@ func (s *GeminiToChatStreamState) terminalChunk(model string) *dto.ChatCompletio
 }
 
 func geminiResponseToolCall(item *dto.GeminiPart) *dto.ToolCallResponse {
+	if item.FunctionCall.StreamedArguments != nil {
+		return &dto.ToolCallResponse{
+			ID:   item.FunctionCall.ID,
+			Type: "function",
+			Function: dto.FunctionResponse{
+				Arguments: *item.FunctionCall.StreamedArguments,
+				Name:      item.FunctionCall.FunctionName,
+			},
+		}
+	}
 	argsBytes, err := kitutil.Marshal(item.FunctionCall.Arguments)
 	if err != nil {
 		return nil
