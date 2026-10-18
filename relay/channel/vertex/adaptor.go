@@ -29,6 +29,7 @@ const (
 	RequestModeClaude     = 1
 	RequestModeGemini     = 2
 	RequestModeOpenSource = 3
+	RequestModeRerank     = 4
 )
 
 var claudeModelMap = map[string]string{
@@ -120,7 +121,9 @@ func (a *Adaptor) ConvertImageRequest(c *gin.Context, info *relaycommon.RelayInf
 }
 
 func (a *Adaptor) Init(info *relaycommon.RelayInfo) {
-	if strings.HasPrefix(info.UpstreamModelName, "claude") {
+	if info.RelayMode == constant.RelayModeRerank {
+		a.RequestMode = RequestModeRerank
+	} else if strings.HasPrefix(info.UpstreamModelName, "claude") {
 		a.RequestMode = RequestModeClaude
 	} else if strings.Contains(info.UpstreamModelName, "llama") ||
 		// open source models
@@ -146,7 +149,12 @@ func (a *Adaptor) getRequestUrl(info *relaycommon.RelayInfo, modelName, suffix s
 			return BuildAnthropicModelURL(info.ChannelBaseUrl, DefaultAPIVersion, adc.ProjectID, region, modelName, suffix), nil
 		} else if a.RequestMode == RequestModeOpenSource {
 			return BuildOpenSourceChatCompletionsURL(info.ChannelBaseUrl, adc.ProjectID, region), nil
+		} else if a.RequestMode == RequestModeRerank {
+			return BuildRankingURL(info.ChannelBaseUrl, adc.ProjectID)
 		}
+	} else if a.RequestMode == RequestModeRerank {
+		// Verified 2026-10-18: discoveryengine.googleapis.com answers 401 "API keys are not supported by this API".
+		return "", errors.New("the GCP Ranking API only accepts OAuth credentials: switch this channel to a service-account JSON key")
 	} else {
 		var keyPrefix string
 		if strings.HasSuffix(suffix, "?alt=sse") {
@@ -197,7 +205,7 @@ func (a *Adaptor) GetRequestURL(info *relaycommon.RelayInfo) (string, error) {
 			model = v
 		}
 		return a.getRequestUrl(info, model, suffix)
-	} else if a.RequestMode == RequestModeOpenSource {
+	} else if a.RequestMode == RequestModeOpenSource || a.RequestMode == RequestModeRerank {
 		return a.getRequestUrl(info, "", "")
 	}
 	return "", errors.New("unsupported request mode")
@@ -338,7 +346,7 @@ func geminiStreamsFunctionCallArguments(model string) bool {
 }
 
 func (a *Adaptor) ConvertRerankRequest(c *gin.Context, relayMode int, request dto.RerankRequest) (any, error) {
-	return nil, nil
+	return convertRerankRequest(request), nil
 }
 
 func (a *Adaptor) ConvertEmbeddingRequest(c *gin.Context, info *relaycommon.RelayInfo, request dto.EmbeddingRequest) (any, error) {
@@ -356,6 +364,9 @@ func (a *Adaptor) DoRequest(c *gin.Context, info *relaycommon.RelayInfo, request
 }
 
 func (a *Adaptor) DoResponse(c *gin.Context, resp *http.Response, info *relaycommon.RelayInfo) (usage any, err *types.NewAPIError) {
+	if a.RequestMode == RequestModeRerank {
+		return rankingHandler(c, resp, info)
+	}
 	claudeAdaptor := claude.Adaptor{}
 	if info.IsStream {
 		switch a.RequestMode {
