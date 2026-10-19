@@ -30,6 +30,7 @@ const (
 	RequestModeGemini     = 2
 	RequestModeOpenSource = 3
 	RequestModeRerank     = 4
+	RequestModeEmbedding  = 5
 )
 
 var claudeModelMap = map[string]string{
@@ -123,6 +124,8 @@ func (a *Adaptor) ConvertImageRequest(c *gin.Context, info *relaycommon.RelayInf
 func (a *Adaptor) Init(info *relaycommon.RelayInfo) {
 	if info.RelayMode == constant.RelayModeRerank {
 		a.RequestMode = RequestModeRerank
+	} else if info.RelayMode == constant.RelayModeEmbeddings {
+		a.RequestMode = RequestModeEmbedding
 	} else if strings.HasPrefix(info.UpstreamModelName, "claude") {
 		a.RequestMode = RequestModeClaude
 	} else if strings.Contains(info.UpstreamModelName, "llama") ||
@@ -143,7 +146,7 @@ func (a *Adaptor) getRequestUrl(info *relaycommon.RelayInfo, modelName, suffix s
 		}
 		a.AccountCredentials = *adc
 
-		if a.RequestMode == RequestModeGemini {
+		if a.RequestMode == RequestModeGemini || a.RequestMode == RequestModeEmbedding {
 			return BuildGoogleModelURL(info.ChannelBaseUrl, DefaultAPIVersion, adc.ProjectID, region, modelName, suffix), nil
 		} else if a.RequestMode == RequestModeClaude {
 			return BuildAnthropicModelURL(info.ChannelBaseUrl, DefaultAPIVersion, adc.ProjectID, region, modelName, suffix), nil
@@ -162,7 +165,7 @@ func (a *Adaptor) getRequestUrl(info *relaycommon.RelayInfo, modelName, suffix s
 		} else {
 			keyPrefix = "?"
 		}
-		if a.RequestMode == RequestModeGemini {
+		if a.RequestMode == RequestModeGemini || a.RequestMode == RequestModeEmbedding {
 			return fmt.Sprintf(
 				"%s%skey=%s",
 				BuildGoogleModelURL(info.ChannelBaseUrl, DefaultAPIVersion, "", region, modelName, suffix),
@@ -207,6 +210,8 @@ func (a *Adaptor) GetRequestURL(info *relaycommon.RelayInfo) (string, error) {
 		return a.getRequestUrl(info, model, suffix)
 	} else if a.RequestMode == RequestModeOpenSource || a.RequestMode == RequestModeRerank {
 		return a.getRequestUrl(info, "", "")
+	} else if a.RequestMode == RequestModeEmbedding {
+		return a.getRequestUrl(info, info.UpstreamModelName, "predict")
 	}
 	return "", errors.New("unsupported request mode")
 }
@@ -350,8 +355,7 @@ func (a *Adaptor) ConvertRerankRequest(c *gin.Context, relayMode int, request dt
 }
 
 func (a *Adaptor) ConvertEmbeddingRequest(c *gin.Context, info *relaycommon.RelayInfo, request dto.EmbeddingRequest) (any, error) {
-	//TODO implement me
-	return nil, errors.New("not implemented")
+	return convertEmbeddingRequest(request), nil
 }
 
 func (a *Adaptor) ConvertOpenAIResponsesRequest(c *gin.Context, info *relaycommon.RelayInfo, request dto.OpenAIResponsesRequest) (any, error) {
@@ -366,6 +370,9 @@ func (a *Adaptor) DoRequest(c *gin.Context, info *relaycommon.RelayInfo, request
 func (a *Adaptor) DoResponse(c *gin.Context, resp *http.Response, info *relaycommon.RelayInfo) (usage any, err *types.NewAPIError) {
 	if a.RequestMode == RequestModeRerank {
 		return rankingHandler(c, resp, info)
+	}
+	if a.RequestMode == RequestModeEmbedding {
+		return embeddingHandler(c, resp, info)
 	}
 	claudeAdaptor := claude.Adaptor{}
 	if info.IsStream {
