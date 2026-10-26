@@ -220,8 +220,15 @@ func main() {
 	}
 
 	srv := &http.Server{
-		Addr:    ":" + port,
-		Handler: server,
+		Addr: ":" + port,
+		// Fish Audio 官方兼容接口同款路径:直连 api.fish.audio 的客户端只换域名就能走 new-api。
+		// 进 gin 之前改写成 /v1/audio/speech,鉴权、限流、选渠道、计费都走同一套,中间件也不会跑两遍。
+		Handler: http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			if r.URL.Path == "/compat/v1/audio/speech" {
+				r.URL.Path = "/v1/audio/speech"
+			}
+			server.ServeHTTP(w, r)
+		}),
 	}
 
 	go func() {
