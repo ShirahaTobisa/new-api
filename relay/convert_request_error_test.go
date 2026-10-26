@@ -314,3 +314,46 @@ func TestImageHelperKeepsAdaptorClassifiedConvertError(t *testing.T) {
 	assert.True(t, types.IsSkipRetryError(apiErr), "other channels must not be asked to serve the same name")
 	assert.Contains(t, apiErr.Error(), "not served by the alibaba task plugin")
 }
+
+func TestAudioSpeechPassThroughForwardsVendorFields(t *testing.T) {
+	service.InitHttpClient()
+	body := `{"model":"fish-audio/s2.1-pro","input":"hello","voice":"v1","provider":{"options":{"fish-audio":{"prosody":{"volume":2}}}}}`
+	for _, tc := range []struct {
+		name        string
+		passThrough bool
+	}{
+		{name: "rebuilt request drops vendor fields", passThrough: false},
+		{name: "pass-through keeps vendor fields", passThrough: true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			received := make(chan []byte, 1)
+			upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				got, err := io.ReadAll(r.Body)
+				if err == nil {
+					received <- got
+				}
+				w.Header().Set("Content-Type", "application/json")
+				w.WriteHeader(http.StatusBadGateway)
+				_, _ = io.WriteString(w, `{"error":{"message":"fixture upstream failure","type":"upstream_error"}}`)
+			}))
+			t.Cleanup(upstream.Close)
+			c, _ := gin.CreateTestContext(httptest.NewRecorder())
+			c.Request = httptest.NewRequest(http.MethodPost, "/v1/audio/speech", strings.NewReader(body))
+			c.Request.Header.Set("Content-Type", "application/json")
+			common.SetContextKey(c, constant.ContextKeyChannelType, constant.ChannelTypeOpenAI)
+			common.SetContextKey(c, constant.ContextKeyChannelBaseUrl, upstream.URL)
+			common.SetContextKey(c, constant.ContextKeyChannelSetting, dto.ChannelSettings{PassThroughBodyEnabled: tc.passThrough})
+			request, err := helper.GetAndValidAudioRequest(c, relayconstant.RelayModeAudioSpeech)
+			require.NoError(t, err)
+			info := &relaycommon.RelayInfo{Request: request, OriginModelName: request.Model, RelayMode: relayconstant.RelayModeAudioSpeech, RequestURLPath: c.Request.URL.Path}
+
+			apiErr := AudioHelper(c, info)
+			require.NotNil(t, apiErr)
+			assert.Equal(t, http.StatusBadGateway, apiErr.StatusCode)
+			require.Len(t, received, 1)
+			forwarded := <-received
+			assert.Equal(t, "hello", gjson.GetBytes(forwarded, "input").String())
+			assert.Equal(t, tc.passThrough, gjson.GetBytes(forwarded, `provider.options.fish-audio.prosody.volume`).Exists())
+		})
+	}
+}
