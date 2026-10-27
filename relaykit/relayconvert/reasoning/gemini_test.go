@@ -42,6 +42,21 @@ func TestRenderGeminiMapsAndClampsInsteadOfRejecting(t *testing.T) {
 			wantCodes:  []string{"gemini_level_adjusted"},
 		},
 		{
+			name:       "high on gemini 4 argon uses thinking level",
+			model:      "gemini-4-argon",
+			intent:     Intent{Mode: ModeEnabled, Effort: EffortHigh},
+			wantLevel:  "high",
+			wantEffort: EffortHigh,
+		},
+		{
+			name:       "medium on gemini 4 argon moves to high",
+			model:      "gemini-4-argon",
+			intent:     Intent{Mode: ModeEnabled, Effort: EffortMedium},
+			wantLevel:  "high",
+			wantEffort: EffortHigh,
+			wantCodes:  []string{"gemini_level_adjusted"},
+		},
+		{
 			name:       "xhigh on gemini 3 flash moves to high",
 			model:      "gemini-3-flash-preview",
 			intent:     Intent{Mode: ModeEnabled, Effort: EffortXHigh},
