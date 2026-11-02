@@ -503,13 +503,13 @@ func geminiLevelForEffort(model string, effort Effort) (string, error) {
 			return string(EffortMinimal), nil
 		}
 		return string(EffortHigh), nil
-	// Gemini 4 Argon is only served with low and high thinking (Antigravity's -low/-high variants).
-	case (strings.HasPrefix(model, "gemini-3-pro") && !strings.HasPrefix(model, "gemini-3.1-pro")), strings.HasPrefix(model, "gemini-4"):
+	case (strings.HasPrefix(model, "gemini-3-pro") && !strings.HasPrefix(model, "gemini-3.1-pro")):
 		if effort == EffortMinimal || effort == EffortLow {
 			return string(EffortLow), nil
 		}
 		return string(EffortHigh), nil
-	case strings.HasPrefix(model, "gemini-3.1-pro"), model == "gemini-pro-latest":
+	// Gemini 4 Argon offers low, medium and high thinking, like Gemini 3.1 Pro.
+	case strings.HasPrefix(model, "gemini-3.1-pro"), model == "gemini-pro-latest", strings.HasPrefix(model, "gemini-4"):
 		if effort == EffortMinimal {
 			return string(EffortLow), nil
 		}

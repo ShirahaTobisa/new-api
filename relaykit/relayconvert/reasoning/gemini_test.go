@@ -49,11 +49,18 @@ func TestRenderGeminiMapsAndClampsInsteadOfRejecting(t *testing.T) {
 			wantEffort: EffortHigh,
 		},
 		{
-			name:       "medium on gemini 4 argon moves to high",
+			name:       "medium on gemini 4 argon stays medium",
 			model:      "gemini-4-argon",
 			intent:     Intent{Mode: ModeEnabled, Effort: EffortMedium},
-			wantLevel:  "high",
-			wantEffort: EffortHigh,
+			wantLevel:  "medium",
+			wantEffort: EffortMedium,
+		},
+		{
+			name:       "minimal on gemini 4 argon moves to low",
+			model:      "gemini-4-argon",
+			intent:     Intent{Mode: ModeEnabled, Effort: EffortMinimal},
+			wantLevel:  "low",
+			wantEffort: EffortLow,
 			wantCodes:  []string{"gemini_level_adjusted"},
 		},
 		{
